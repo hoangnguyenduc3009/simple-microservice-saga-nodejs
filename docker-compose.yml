@@ -1,0 +1,70 @@
+services:
+  zookeeper:
+    image: zookeeper:3.8.1
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/data
+      - zookeeper-datalog:/datalog
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: itzg/kafka:latest
+    container_name: kafka
+    environment:
+      - KAFKA_BROKER_ID=0
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  order-service:
+    build: ./services/order-service
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - PORT=4000
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  payment-service:
+    build: ./services/payment-service
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - PORT=4001
+      - SUCCESS_RATE=0.75
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "4001:4001"
+
+  saga-coordinator:
+    build: ./services/saga-coordinator
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - PORT=4002
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "4002:4002"
+
+volumes:
+  zookeeper-data: {}
+  zookeeper-datalog: {}
